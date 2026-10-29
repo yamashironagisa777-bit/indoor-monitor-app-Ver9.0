@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'indoor-monitor-v6-notification-click-fix';
+const CACHE_NAME = 'indoor-monitor-v7-auth-hardening';
 
 const ASSETS = [
   './',
