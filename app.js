@@ -56,6 +56,40 @@
     if (!session?.access_token) throw new Error('ログインの有効期限が切れました。もう一度ログインしてください。');
     return { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${session.access_token}`, ...extra };
   }
+
+  // 保存済みトークンが有効か、起動時・復帰時にSupabase Authで確認する。
+  async function validateSession(session) {
+    if (!session?.access_token || !cfg.supabaseUrl || !cfg.supabaseAnonKey) return false;
+    try {
+      const response = await fetch(`${authBase()}/auth/v1/user`, {
+        method: 'GET',
+        headers: {
+          apikey: cfg.supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`
+        },
+        cache: 'no-store'
+      });
+      if (response.status === 401 || response.status === 403) {
+        saveSession(null);
+        return false;
+      }
+      // ネットワーク障害時に正しいセッションを勝手に破棄しない。
+      return response.ok;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // 同じブラウザの別タブでログアウトした場合も、画面をログイン状態に残さない。
+  window.addEventListener('storage', event => {
+    if (event.key !== AUTH_STORAGE_KEY) return;
+    if (!event.newValue) {
+      authSession = null;
+      showLogin();
+    } else {
+      authSession = null; // 次の確認で最新セッションを読み直す
+    }
+  });
   function showApp() {
     if (loginScreen) loginScreen.hidden = true;
     if (appContent) appContent.hidden = false;
@@ -707,7 +741,7 @@
           method: 'POST',
           headers,
           cache: 'no-store',
-          body: JSON.stringify({ expiresIn: 3600 })
+          body: JSON.stringify({ expiresIn: 600 })
         });
 
         if (!signRes.ok) {
@@ -1130,6 +1164,29 @@
 
   (async () => {
     const session = await getValidSession();
-    if (session) showApp(); else showLogin();
+    if (session && await validateSession(session)) {
+      showApp();
+    } else {
+      saveSession(null);
+      showLogin();
+    }
   })();
+
+  // アプリを開いたまま長時間経過した場合や、別アプリから戻った場合に認証を再確認。
+  let sessionValidationInProgress = false;
+  async function revalidateOnReturn() {
+    if (document.visibilityState !== 'visible' || sessionValidationInProgress) return;
+    sessionValidationInProgress = true;
+    try {
+      const session = await getValidSession();
+      if (!session || !(await validateSession(session))) {
+        saveSession(null);
+        showLogin();
+      }
+    } finally {
+      sessionValidationInProgress = false;
+    }
+  }
+  document.addEventListener('visibilitychange', revalidateOnReturn);
+  window.addEventListener('focus', revalidateOnReturn);
 })();
