@@ -561,27 +561,44 @@
       const current = $('wakeCurrentStatus');
       const summary = $('wakeSummary');
       const list = $('wakeHistory');
+    
       if (current) {
-        const bedText = $('bed')?.textContent || '--';
-        current.textContent = bedText === '在床あり' ? '在床あり' :
-          bedText === '在床なし' ? '離床中' : '在床状態を確認できません';
+        const bedValue = latestFeed?.field5;
+    
+        if (bedValue === null || bedValue === undefined || bedValue === '') {
+          current.textContent = '在床状態を確認できません';
+        } else {
+          current.textContent = Number(bedValue) >= 1
+            ? '在床あり'
+            : '離床中';
+        }
       }
-      if (summary) summary.textContent = 'センサーの最新状態：' + (($('updatedAt')?.textContent || '').replace('最終更新：', '') || '--');
+    
+      if (summary) {
+        summary.textContent = 'センサーの最新状態：' +
+          (($('updatedAt')?.textContent || '').replace('最終更新：', '') || '--');
+      }
+    
       if (!list) return;
+    
       list.replaceChildren();
+    
       if (!wakeEvents.length) {
         const li = document.createElement('li');
         li.textContent = 'ページを開いてからの在床状態の変化がここに表示されます。';
         list.appendChild(li);
         return;
       }
+    
       wakeEvents.slice(0, 5).forEach(event => {
         const li = document.createElement('li');
         const time = document.createElement('span');
         time.className = 'event-time';
         time.textContent = event.time;
+    
         const body = document.createElement('span');
         body.textContent = event.message;
+    
         li.append(time, body);
         list.appendChild(li);
       });
